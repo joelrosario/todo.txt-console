@@ -1,0 +1,604 @@
+#!/usr/bin/env ruby
+
+require 'readline'
+require 'parslet'
+require 'colorize'
+
+ENV_ = {
+	'todo_file' => ENV['TODO_file']
+}
+
+class CommandError < Exception
+	def initialize(message)
+		super
+	end
+end
+
+class CommandParser < Parslet::Parser
+	rule(:whitespace) { str(' ').repeat(1) }
+
+	rule(:token_in_single_quoted_string) { ((str('\\').present? >> match["'"]) | match["^' "]).repeat(1) }
+	rule(:single_quoted_string) { str("'") >> ((token_in_single_quoted_string >> whitespace) | token_in_single_quoted_string).repeat(1).as(:string) >> str("'") }
+
+	rule(:token_in_double_quoted_string) { ((str('\\').present? >> match['"']) | match['^" ']).repeat(1) }
+	rule(:double_quoted_string) { str('"') >> ((token_in_double_quoted_string >> whitespace) | token_in_double_quoted_string).repeat(1).as(:string) >> str('"') }
+
+	rule(:quoted_string) { single_quoted_string | double_quoted_string }
+	rule(:unquoted_word) { match['^ \'"'].repeat(1).as(:token) }
+
+	rule(:fragment) { (quoted_string | unquoted_word) }
+
+	rule(:commands) { ((str("set") | str("show") | str("clear") | str("ls") | str("add") | str("append") | str("app") | str("rm") | str("u") | str("do") | str("pri") | str("t")).as(:token) >> (whitespace >> ((fragment >> whitespace) | fragment).repeat(1)).maybe).as(:command) }
+
+	root(:commands)
+end
+
+class CommandTransformation < Parslet::Transform
+	rule(:token => simple(:token)) { Token.new(token.to_s) }
+	rule(:string => simple(:string)) { Token.new(string.to_s) }
+	rule(:command => subtree(:tree)) {
+		tokens = tree.is_a?(Array) ? tree : [tree]
+		command_name = tokens[0].to_s
+		tokens = tokens.drop(1)
+
+		case command_name
+			when 'ls'
+				ListCommand.new(tokens)
+			when 'add'
+				AddCommand.new(tokens)
+			when 'rm'
+				DeleteCommand.new(tokens)
+			when 'u'
+				UpdateCommand.new(tokens)
+			when 'do'
+				DoneCommand.new(tokens)
+			when 'pri'
+				SetPriorityCommand.new(tokens)
+			when 'set'
+				SetVariableCommand.new(tokens)
+			when 'show'
+				ShowVariableCommand.new(tokens)
+			when 'clear'
+				ClearVariableCommand.new(tokens)
+			when 't'
+				ThresholdCommand.new(tokens)
+			when 'app'
+				AppendCommand.new(tokens)
+			else
+				raise CommandError.new("Command #{command_name} not recognized")
+		end
+	}
+end
+
+def parse(data)
+	parser = CommandParser.new
+	tree = parser.parse(data)
+	transformer = CommandTransformation.new
+	return transformer.apply(tree)
+end
+
+VARS = {
+}
+
+ENV.keys.find_all {|env_var|
+	env_var.index('TODO_') == 0
+}.collect {|env_var|
+	[env_var, env_var.gsub(/^TODO_/, '')]
+}.each {|env_var, internal_var|
+	VARS[internal_var] = ENV[env_var]
+}
+
+class Todo
+	attr_reader :priority
+
+	def initialize(line)
+		process(line)
+	end
+
+	def process(line)
+		@line = line.strip
+
+		tokens = @line.split(' ')
+
+		@done = false
+		if tokens[0] == 'x'
+			@done = true
+			tokens.delete_at(0)
+		end
+
+		@tags = tokens.find_all {|token| token[0] == '+' }
+		@lists = tokens.find_all {|token| token[0] == '@' }
+
+		@priority = ''
+		if tokens[0].length == 3 && tokens[0][0] == '(' && tokens[0][2] == ')'
+			@priority = tokens[0]
+			tokens.delete_at(0)
+		end
+
+		@threshold_date = nil
+
+		token = tokens.each_with_index {|token, index|
+			if _threshold?(token)
+				_update_threshold(tokens, index)
+				break
+			end
+		}
+
+		@line = tokens.join(' ')
+	end
+
+	def _update_threshold(tokens, index)
+		token = tokens[index]
+
+		date = (token.split(':')[1] || "").downcase
+		time = Time.now
+
+		copy_threshold_to_token = proc {
+			tokens[index] = "t:#{@threshold_date.year}-#{@threshold_date.month.to_s.rjust(2, '0')}-#{@threshold_date.day.to_s.rjust(2, '0')}"
+		}
+
+		days_of_the_week = {
+			sun: 0, sunday: 0,
+			mon: 1, monday: 1,
+			tue: 2, tuesday: 2,
+			wed: 3, wednesday: 3,
+			thu: 4, thur: 4, thursday: 4,
+			fri: 5, friday: 5,
+			sat: 6, saturday: 6,
+			sun: 7, sunday: 7
+		}
+
+		one_day = 86400
+
+		if date == 'today'
+			@threshold_date = Time.new(time.year, time.month, time.day)
+		elsif date == 'tomorrow'
+			@threshold_date = Time.new(time.year, time.month, time.day) + one_day
+		elsif days_of_the_week.include?(date.to_sym)
+			difference = (time.wday - days_of_the_week[date.to_sym]).abs
+			difference += 7 if difference == 0
+			@threshold_date = time + (one_day* difference)
+		else	
+			date_tokens = date.split('-').collect {|token| token.to_i }
+
+			if date_tokens.length > 0
+				date_tokens.unshift(time.month) if date_tokens.length == 1
+				date_tokens.unshift(time.year) if date_tokens.length == 2
+
+				year, month, date = date_tokens
+
+				@threshold_date = Time.new(year, month, date)
+			end
+		end
+
+		if @threshold_date
+			copy_threshold_to_token.call
+		end
+	end
+
+	def _threshold?(token)
+ 		token =~ /\bt:[a-zA-Z0-9-]+\b/
+	end
+
+	def future?
+		@threshold_date && @threshold_date > Time.now
+	end
+
+	def non_regex_match(criteria)
+		non_regex_matches = criteria.find_all {|criterion|
+			@tags.find {|tag| tag == criterion } || @lists.find {|list| list == criterion } || @priority == criterion
+		}
+
+		return (non_regex_matches.length == criteria.length)
+	end
+
+	def regex_match(regexes)
+		matching_regexes = regexes.find_all {|regex|
+			Regexp.new(regex, Regexp::IGNORECASE | Regexp::EXTENDED).match(@line.to_s)
+		}
+
+		return (matching_regexes.length == regexes.length)
+	end
+
+	def matches(criteria)
+		return true if criteria.length == 0
+		criteria = criteria.dup
+
+		regexes = criteria.find_all {|criterion|
+			criterion.index('/') == 0 && criterion.reverse.index('/') == 0
+		}
+
+		regexes.each {|regex| criteria.delete(regex) }
+
+		regexes = regexes.collect {|regex|
+			regex[1..regex.length-2]
+		}
+
+		return non_regex_match(criteria) && regex_match(regexes)
+	end
+
+	def mark_done
+		@done = true
+	end
+
+	def not_done?
+		!@done
+	end
+
+	def done?
+		@done
+	end
+
+	def set_priority(priority)
+		priority = '' if priority.nil?
+		priority = priority.strip.upcase
+
+		priority = "(" + priority + ")" if priority.length > 0
+		
+		@priority = priority
+	end
+
+	def set_threshold(threshold)
+		tokens = @line.split(' ')
+
+		begin
+			tokens.each_with_index {|token, index|
+				if _threshold?(token)
+					tokens[index] = "t:#{threshold}"
+					_update_threshold(tokens, index)
+					return
+				end
+			}
+
+			tokens << "t:#{threshold}"
+			_update_threshold(tokens, tokens.length - 1)
+		ensure
+			@line = tokens.join(' ')
+		end
+	end
+
+	def append(addition)
+		process("#{line_text} #{addition}")
+	end
+
+	def line_text
+		[(@done ? 'x' : ''), @priority, @line].reject {|piece| piece == nil || piece.strip.length == 0 }.join(' ')
+	end
+
+	def to_colored_text(line_number)
+		text = to_plaintext(line_number)
+		case @priority
+			when done?
+				text.gray
+			when "(A)"
+				text.light_red
+			when "(B)"
+				text.light_yellow
+			when "(C)"
+				text.light_green
+			when "(D)"
+				text.light_blue
+			else
+				text
+		end
+	end
+
+	def to_plaintext(line_number)
+		[line_number, line_text].join("\t")
+	end
+
+	def to_file_format
+		line_text
+	end
+end
+
+class TodoList
+	def initialize(filename)
+		@todos = File.read(filename).split("\n").collect {|line| Todo.new(line.strip) }
+		@filename = filename
+	end
+
+	def to_plaintext(&should_include)
+		to_text(should_include) {|todo, line_number| todo.to_plaintext(line_number) }
+	end
+
+	def to_colored_text(&should_include)
+		to_text(should_include) {|todo, line_number| todo.to_colored_text(line_number) }
+	end
+
+	def to_text(should_include, &text_formatter)
+		todos = @todos.zip((0..(@todos.length - 1))).collect {|todo, line_number|
+			{todo: todo, line_number: line_number}
+		}
+
+		todos = todos.find_all {|data|
+			todo = data[:todo]
+			todo.not_done? && should_include.call(todo)
+		}
+
+		todos.sort {|data1, data2|
+			p1 = data1[:todo].priority.strip
+			p2 = data2[:todo].priority.strip
+
+			if (p1.length == p2.length && p2.length == 0) || (p1 == p2)
+				0
+			elsif p1.length == 0
+				1
+			elsif p2.length == 0
+				-1
+			else
+				p1 <=> p2
+			end
+		}.collect {|data|
+			todo = data[:todo]
+			line_number = data[:line_number]
+
+			text_formatter.call(todo, line_number)
+		}.join("\n")
+	end
+
+	def to_file_format
+		@todos.collect {|todo| todo.to_file_format }.join("\n")
+	end
+
+	def add(task)
+		@todos << Todo.new(task)
+	end
+
+	def delete(index)
+		@todos.delete_at(index)
+	end
+
+	def update(index, task)
+		@todos[index] = Todo.new(task)
+	end
+
+	def set_priority(index, priority)
+		@todos[index].set_priority(priority)
+	end
+
+	def mark_done(index)
+		@todos[index].mark_done
+	end
+
+	def set_threshold(index, threshold)
+		@todos[index].set_threshold(threshold)
+	end
+
+	def append(index, addition)
+		@todos[index].append(addition)
+	end
+
+	def save
+		File.open(@filename, "w") {|f| f.write(to_file_format) }
+	end
+end
+
+module Command
+	def todo_file
+		ENV_['todo_file']
+	end
+
+	def load_todos
+		TodoList.new(todo_file)
+	end
+end
+
+module ModificationCommand
+	include Command
+
+	def execute
+		@todos = load_todos
+		perform_modification
+		@todos.save
+	end
+end
+
+class AddCommand
+	include ModificationCommand
+
+	def initialize(arguments)
+		@task = arguments.collect {|arg| arg.to_s }.join(" ")
+	end
+
+	def perform_modification
+		@todos.add(@task)
+	end
+end
+
+class UpdateCommand
+	include ModificationCommand
+
+	def initialize(arguments)
+		@index = arguments[0].to_s.to_i
+		@task = arguments.drop(1).collect {|arg| arg.to_s }.join(" ")
+	end
+
+	def perform_modification
+		@todos.update(@index, @task)
+	end
+end
+
+class DeleteCommand
+	include ModificationCommand
+
+	def initialize(arguments)
+		@index = arguments[0].to_s.to_i
+	end
+
+	def perform_modification
+		@todos.delete(@index)
+	end
+end
+
+class DoneCommand
+	include ModificationCommand
+
+	def initialize(arguments)
+		@index = arguments[0].to_s.to_i
+	end
+
+	def perform_modification
+		@todos.mark_done(@index)
+	end
+end
+
+class SetPriorityCommand
+	include ModificationCommand
+
+	def initialize(arguments)
+		@index = arguments[0].to_s.to_i
+		@priority = arguments[1].to_s.upcase
+	end
+
+	def perform_modification
+		@todos.set_priority(@index, @priority)
+	end
+end
+
+class ListCommand
+	include Command
+
+	def initialize(arguments)
+		@arguments = arguments.collect {|arg| arg.to_s }
+		@arguments += VARS['filter'].split(' ') if VARS['filter']
+	end
+
+	def accepted(todo, acceptance_checks)
+		accepted = acceptance_checks.find {|check| check.call(todo) == false } ? false : true
+		return accepted
+	end
+
+	def execute
+		todos = load_todos
+		acceptance_checks = []
+
+		if VARS['future_tasks'] == 'hidden'
+			acceptance_checks << proc {|todo| !todo.future? }
+		end
+
+		acceptance_checks << proc {|todo| todo.matches(@arguments) }
+
+		puts todos.to_colored_text {|todo| accepted(todo, acceptance_checks) }
+	end
+end
+
+class SetVariableCommand
+	def initialize(arguments)
+		@name, remainder = arguments[0].to_s.split('=')
+		@name = @name.strip
+
+		arguments = arguments.drop(1).unshift(remainder)
+		@value = arguments.collect {|arg| arg.to_s }.join(' ')
+	end
+
+	def execute
+		VARS[@name] = @value
+	end
+end
+
+class ShowVariableCommand
+	def initialize(arguments)
+		@name = arguments.length > 0 ? arguments[0].to_s : nil
+	end
+
+	def display_key(key)
+		puts "#{key}='#{VARS[key]}'"
+	end
+
+	def execute
+		if @name
+			display_key(@name)
+		else
+			VARS.keys.sort.each {|key| display_key(key) }
+		end
+	end
+end
+
+class ClearVariableCommand
+	def initialize(arguments)
+		@name = arguments[0].to_s
+	end
+
+	def execute
+		VARS.delete(@name)
+	end
+end
+
+class ThresholdCommand
+	include ModificationCommand
+
+	def initialize(arguments)
+		@id = arguments[0].to_s.to_i
+		@threshold = arguments[1].to_s
+	end
+
+	def perform_modification
+		@todos.set_threshold(@id, @threshold)
+	end
+end
+
+class AppendCommand
+	include ModificationCommand
+
+	def initialize(arguments)
+		arguments = arguments.collect {|arg| arg.to_s }
+		@id = arguments[0].to_i
+		@threshold = arguments.drop(1).join("\n")
+	end
+
+	def perform_modification
+		@todos.append(@id, @threshold)
+	end
+end
+
+class Token
+	def initialize(token)
+		@token = token
+	end
+
+	def to_s; @token; end
+end
+
+def execute_command(line)
+	begin
+		command = parse(line)
+		command.execute
+	rescue CommandError => ce
+		puts "Command error: #{ce.message}"
+	rescue Parslet::ParseFailed => pe
+		puts "Parse error: #{pe.message}"
+	rescue Object => e
+		puts e.class.to_s + ": " + e.message
+		puts e.backtrace
+	end
+end
+
+def conflict_exists
+	dir = File.dirname(ENV_['todo_file'])
+	Dir["#{dir}/*todo*.txt"].count > 1
+end
+
+def conflict_warning
+	"CONFLICT FOUND!!!".light_red
+end
+
+if ARGV.length > 0
+	puts conflict_warning if conflict_exists
+	execute_command(ARGV.join(' '))
+	exit 0
+end
+
+execute_command("ls")
+
+loop {
+	prompt = ">> "
+	prompt = "CONFLICT".light_red + prompt if conflict_exists
+	line = Readline.readline(prompt, true)
+	line = line.strip if line
+
+	break if line == 'quit' || line == nil
+
+	execute_command(line)
+}
+
