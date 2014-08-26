@@ -290,6 +290,10 @@ class Todo
 	def to_file_format
 		line_text
 	end
+
+	def completeable_tokens
+		(@tags || []) + (@lists || [])
+	end
 end
 
 class TodoList
@@ -372,21 +376,21 @@ class TodoList
 	def save
 		File.open(@filename, "w") {|f| f.write(to_file_format) }
 	end
+
+	def completeable_tokens
+		@todos.collect {|todo| todo.completeable_tokens }.flatten.uniq
+	end
 end
 
-module Command
-	def todo_file
-		ENV_['todo_file']
-	end
+def todo_file
+	todo_file = ENV_['todo_file']
+end
 
-	def load_todos
-		TodoList.new(todo_file)
-	end
+def load_todos
+	TodoList.new(todo_file)
 end
 
 module ModificationCommand
-	include Command
-
 	def execute
 		@todos = load_todos
 		perform_modification
@@ -457,8 +461,6 @@ class SetPriorityCommand
 end
 
 class ListCommand
-	include Command
-
 	def initialize(arguments)
 		@arguments = arguments.collect {|arg| arg.to_s }
 		@arguments += VARS['filter'].split(' ') if VARS['filter']
@@ -575,7 +577,7 @@ def execute_command(line)
 end
 
 def conflict_exists
-	dir = File.dirname(ENV_['todo_file'])
+	dir = File.dirname(todo_file)
 	Dir["#{dir}/*todo*.txt"].count > 1
 end
 
@@ -590,6 +592,17 @@ if ARGV.length > 0
 end
 
 execute_command("ls")
+
+def get_completeable_tokens
+	todos = load_todos
+	todos.completeable_tokens
+end
+
+Readline.basic_word_break_characters = Readline.basic_word_break_characters.delete("@")
+
+Readline.completion_proc = proc {|incomplete_token|
+	get_completeable_tokens.find_all {|token| token.index(incomplete_token) == 0 }
+}
 
 loop {
 	prompt = ">> "
