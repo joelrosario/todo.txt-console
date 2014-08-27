@@ -347,6 +347,7 @@ class TodoList
 
 	def add(task)
 		@todos << Todo.new(task)
+		return @todos.length - 1
 	end
 
 	def delete(index)
@@ -406,15 +407,21 @@ class AddCommand
 	end
 
 	def perform_modification
-		@todos.add(@task)
+		ENV_['last_added_index'] = @todos.add(@task)
 	end
+end
+
+def to_index(value)
+	value = value.to_s
+	value = ENV_['last_added_index'] if value == '.'
+	return value.to_i
 end
 
 class UpdateCommand
 	include ModificationCommand
 
 	def initialize(arguments)
-		@index = arguments[0].to_s.to_i
+		@index = to_index(arguments[0])
 		@task = arguments.drop(1).collect {|arg| arg.to_s }.join(" ")
 	end
 
@@ -427,7 +434,7 @@ class DeleteCommand
 	include ModificationCommand
 
 	def initialize(arguments)
-		@index = arguments[0].to_s.to_i
+		@index = to_index(arguments[0])
 	end
 
 	def perform_modification
@@ -439,7 +446,7 @@ class DoneCommand
 	include ModificationCommand
 
 	def initialize(arguments)
-		@index = arguments[0].to_s.to_i
+		@index = to_index(arguments[0])
 	end
 
 	def perform_modification
@@ -451,7 +458,7 @@ class SetPriorityCommand
 	include ModificationCommand
 
 	def initialize(arguments)
-		@index = arguments[0].to_s.to_i
+		@index = to_index(arguments[0])
 		@priority = arguments[1].to_s.upcase
 	end
 
@@ -531,12 +538,12 @@ class ThresholdCommand
 	include ModificationCommand
 
 	def initialize(arguments)
-		@id = arguments[0].to_s.to_i
+		@index = to_index(arguments[0])
 		@threshold = arguments[1].to_s
 	end
 
 	def perform_modification
-		@todos.set_threshold(@id, @threshold)
+		@todos.set_threshold(@index, @threshold)
 	end
 end
 
@@ -545,12 +552,12 @@ class AppendCommand
 
 	def initialize(arguments)
 		arguments = arguments.collect {|arg| arg.to_s }
-		@id = arguments[0].to_i
+		@index = to_index(arguments[0])
 		@threshold = arguments.drop(1).join("\n")
 	end
 
 	def perform_modification
-		@todos.append(@id, @threshold)
+		@todos.append(@index, @threshold)
 	end
 end
 
