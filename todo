@@ -619,6 +619,6 @@ loop {
 
 	break if line == 'quit' || line == nil
 
-	execute_command(line)
+	execute_command(line) if line.length > 0
 }
 
