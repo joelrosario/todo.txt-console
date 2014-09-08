@@ -9,6 +9,7 @@ class AppendCommand
 
 	def perform_modification
 		@todos.append(@index, @threshold)
+		VARS['last_added_index'] = @index
 	end
 end
 

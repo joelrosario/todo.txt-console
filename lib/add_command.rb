@@ -6,7 +6,7 @@ class AddCommand
 	end
 
 	def perform_modification
-		ENV_['last_added_index'] = @todos.add(@task)
+		VARS['last_added_index'] = @todos.add(@task)
 	end
 end
 

@@ -7,6 +7,7 @@ class DeleteCommand
 
 	def perform_modification
 		@todos.delete(@index)
+		VARS.delete('last_added_index')
 	end
 end
 

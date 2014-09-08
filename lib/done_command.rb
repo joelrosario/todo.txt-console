@@ -7,6 +7,7 @@ class DoneCommand
 
 	def perform_modification
 		@todos.mark_done(@index)
+		VARS['last_added_index'] = @index
 	end
 end
 

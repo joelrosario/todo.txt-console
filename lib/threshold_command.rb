@@ -8,5 +8,6 @@ class ThresholdCommand
 
 	def perform_modification
 		@todos.set_threshold(@index, @threshold)
+		VARS['last_added_index'] = @index
 	end
 end

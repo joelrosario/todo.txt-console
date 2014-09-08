@@ -8,6 +8,7 @@ class SetPriorityCommand
 
 	def perform_modification
 		@todos.set_priority(@index, @priority)
+		VARS['last_added_index'] = @index
 	end
 end
 

@@ -20,7 +20,7 @@ class CommandParser < Parslet::Parser
 
 	rule(:fragment) { (quoted_string | unquoted_word) }
 
-	rule(:commands) { ((str("set") | str("show") | str("clear") | str("ls") | str("add") | str("append") | str("app") | str("rm") | str("u") | str("do") | str("pri") | str("t")).as(:token) >> (whitespace >> ((fragment >> whitespace) | fragment).repeat(1)).maybe).as(:command) }
+	rule(:commands) { ((str("merge") | str("set") | str("show") | str("clear") | str("ls") | str("add") | str("append") | str("app") | str("rm") | str("u") | str("do") | str("pri") | str("t")).as(:token) >> (whitespace >> ((fragment >> whitespace) | fragment).repeat(1)).maybe).as(:command) }
 
 	root(:commands)
 end
@@ -56,6 +56,8 @@ class CommandTransformation < Parslet::Transform
 				ThresholdCommand.new(tokens)
 			when 'app'
 				AppendCommand.new(tokens)
+			when 'merge'
+				MergeCommand.new(tokens)
 			else
 				raise CommandError.new("Command #{command_name} not recognized")
 		end
