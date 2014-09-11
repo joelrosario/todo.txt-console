@@ -95,11 +95,13 @@ class Todo
 	end
 
 	def non_regex_match(criteria)
+		priority_criteria, criteria = criteria.partition {|criterion| criterion[0] == '(' }
+
 		non_regex_matches = criteria.find_all {|criterion|
-			@tags.find {|tag| tag == criterion } || @lists.find {|list| list == criterion } || @priority == criterion
+			@tags.find {|tag| tag == criterion } || @lists.find {|list| list == criterion }
 		}
 
-		return (non_regex_matches.length == criteria.length)
+		return (non_regex_matches.length == criteria.length) && (priority_criteria.length == 0 || priority_criteria.include?(@priority))
 	end
 
 	def regex_match(regexes)
@@ -114,11 +116,9 @@ class Todo
 		return true if criteria.length == 0
 		criteria = criteria.dup
 
-		regexes = criteria.find_all {|criterion|
+		regexes, criteria = criteria.partition {|criterion|
 			criterion.index('/') == 0 && criterion.reverse.index('/') == 0
 		}
-
-		regexes.each {|regex| criteria.delete(regex) }
 
 		regexes = regexes.collect {|regex|
 			regex[1..regex.length-2]
