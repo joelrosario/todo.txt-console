@@ -2,7 +2,7 @@ class DoneCommand
 	include ModificationCommand
 
 	def initialize(arguments)
-		@index = to_index(arguments[0])
+		@index = (arguments && arguments.length > 0) ? to_index(arguments[0]) : nil
 	end
 
 	def perform_modification

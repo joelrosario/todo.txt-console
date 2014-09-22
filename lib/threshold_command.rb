@@ -2,8 +2,8 @@ class ThresholdCommand
 	include ModificationCommand
 
 	def initialize(arguments)
-		@index = to_index(arguments[0])
-		@threshold = arguments[1].to_s
+		@index = to_index(arguments[0]) if arguments.length > 1
+		@threshold = arguments.last.to_s
 	end
 
 	def perform_modification

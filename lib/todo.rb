@@ -95,11 +95,13 @@ class Todo
 	end
 
 	def non_regex_match(criteria)
-		priority_criteria, criteria = criteria.partition {|criterion| criterion[0] == '(' }
+		priority_criteria, criteria = criteria.partition {|criterion| criterion.length == 1 }
 
 		non_regex_matches = criteria.find_all {|criterion|
 			@tags.find {|tag| tag == criterion } || @lists.find {|list| list == criterion }
 		}
+
+		priority_criteria = priority_criteria.collect {|priority| "(#{priority.upcase})" }
 
 		return (non_regex_matches.length == criteria.length) && (priority_criteria.length == 0 || priority_criteria.include?(@priority))
 	end

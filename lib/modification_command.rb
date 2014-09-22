@@ -15,7 +15,7 @@ module ModificationCommand
 		perform_modification
 		@todos.save
 
-		return nil
+		return {}
 	end
 end
 
