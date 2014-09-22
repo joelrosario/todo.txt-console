@@ -1,7 +1,9 @@
 def execute_command(line)
 	begin
-		command = parse(line)
-		command.execute
+		results = nil
+		commands = parse(line)
+
+		commands.each {|command| results = command.execute(results) }
 	rescue CommandError => ce
 		puts "Command error: #{ce.message}"
 	rescue Parslet::ParseFailed => pe

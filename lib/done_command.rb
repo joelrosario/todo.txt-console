@@ -6,8 +6,7 @@ class DoneCommand
 	end
 
 	def perform_modification
-		@todos.mark_done(@index)
-		VARS['last_added_index'] = @index
+		for_each_index {|index| @todos.mark_done(index) }
 	end
 end
 

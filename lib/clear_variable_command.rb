@@ -3,7 +3,7 @@ class ClearVariableCommand
 		@name = arguments[0].to_s
 	end
 
-	def execute
+	def execute(previous_input)
 		VARS.delete(@name)
 	end
 end

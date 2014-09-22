@@ -7,7 +7,6 @@ class ThresholdCommand
 	end
 
 	def perform_modification
-		@todos.set_threshold(@index, @threshold)
-		VARS['last_added_index'] = @index
+		for_each_index {|index| @todos.set_threshold(index, @threshold) }
 	end
 end

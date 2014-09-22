@@ -8,7 +8,6 @@ class UpdateCommand
 
 	def perform_modification
 		@todos.update(@index, @task)
-		VARS['last_added_index'] = @index
 	end
 end
 

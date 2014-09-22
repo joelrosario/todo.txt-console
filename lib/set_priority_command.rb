@@ -7,8 +7,7 @@ class SetPriorityCommand
 	end
 
 	def perform_modification
-		@todos.set_priority(@index, @priority)
-		VARS['last_added_index'] = @index
+		for_each_index {|index| @todos.set_priority(index, @priority) }
 	end
 end
 

@@ -20,8 +20,12 @@ class TodoList
 		to_text(should_include) {|todo, line_number| todo.to_colored_text(line_number) }
 	end
 
+	def todos_with_id
+		@todos.zip((0..(@todos.length - 1)))
+	end
+
 	def to_text(should_include, &text_formatter)
-		todos = @todos.zip((0..(@todos.length - 1))).collect {|todo, line_number|
+		todos = todos_with_id.collect {|todo, line_number|
 			{todo: todo, line_number: line_number}
 		}
 
@@ -90,5 +94,9 @@ class TodoList
 
 	def completeable_tokens
 		@todos.collect {|todo| todo.completeable_tokens }.flatten.uniq
+	end
+
+	def get_ids
+		todos_with_id.collect {|todo, id| if yield(todo) then id else nil end }.compact
 	end
 end

@@ -8,8 +8,7 @@ class AppendCommand
 	end
 
 	def perform_modification
-		@todos.append(@index, @threshold)
-		VARS['last_added_index'] = @index
+		for_each_index {|index| @todos.append(index, @threshold) }
 	end
 end
 

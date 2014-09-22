@@ -1,7 +1,9 @@
 class ListCommand
 	def initialize(arguments)
-		@arguments = arguments.collect {|arg| arg.to_s }
-		@arguments += VARS['filter'].split(' ') if VARS['filter']
+		@arguments = VARS['filter'].split(' ') if VARS['filter']
+		arguments = arguments.collect {|arg| arg.to_s }
+		arguments.each {|arg| if arg[0] == '(' then @arguments = @arguments.reject {|filter| filter[0] == '(' } end }
+		@arguments += arguments
 	end
 
 	def accepted(todo, acceptance_checks)
@@ -9,7 +11,7 @@ class ListCommand
 		return accepted
 	end
 
-	def execute
+	def execute(previous_input)
 		todos = load_todos
 		acceptance_checks = []
 
@@ -20,6 +22,7 @@ class ListCommand
 		acceptance_checks << proc {|todo| todo.matches(@arguments) }
 
 		puts todos.to_colored_text {|todo| accepted(todo, acceptance_checks) }
+		return todos.get_ids {|todo| accepted(todo, acceptance_checks) }
 	end
 end
 

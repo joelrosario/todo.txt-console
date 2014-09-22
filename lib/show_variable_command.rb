@@ -7,7 +7,7 @@ class ShowVariableCommand
 		puts "#{key}='#{VARS[key]}'"
 	end
 
-	def execute
+	def execute(previous_input)
 		if @name
 			display_key(@name)
 		else

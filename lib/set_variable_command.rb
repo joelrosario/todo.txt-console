@@ -7,7 +7,7 @@ class SetVariableCommand
 		@value = arguments.collect {|arg| arg.to_s }.join(' ')
 	end
 
-	def execute
+	def execute(previous_input)
 		VARS[@name] = @value
 	end
 end

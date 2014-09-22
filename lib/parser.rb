@@ -9,18 +9,20 @@ end
 class CommandParser < Parslet::Parser
 	rule(:whitespace) { str(' ').repeat(1) }
 
-	rule(:token_in_single_quoted_string) { ((str('\\').present? >> match["'"]) | match["^' "]).repeat(1) }
+	rule(:token_in_single_quoted_string) { ((str('\\').present? >> match["'"]) | match["^'| "]).repeat(1) }
 	rule(:single_quoted_string) { str("'") >> ((token_in_single_quoted_string >> whitespace) | token_in_single_quoted_string).repeat(1).as(:string) >> str("'") }
 
-	rule(:token_in_double_quoted_string) { ((str('\\').present? >> match['"']) | match['^" ']).repeat(1) }
+	rule(:token_in_double_quoted_string) { ((str('\\').present? >> match['"']) | match['^"| ']).repeat(1) }
 	rule(:double_quoted_string) { str('"') >> ((token_in_double_quoted_string >> whitespace) | token_in_double_quoted_string).repeat(1).as(:string) >> str('"') }
 
 	rule(:quoted_string) { single_quoted_string | double_quoted_string }
-	rule(:unquoted_word) { match['^ \'"'].repeat(1).as(:token) }
+	rule(:unquoted_word) { match['^ \'"|'].repeat(1).as(:token) }
 
 	rule(:fragment) { (quoted_string | unquoted_word) }
 
-	rule(:commands) { ((str("merge") | str("set") | str("show") | str("clear") | str("ls") | str("add") | str("append") | str("app") | str("rm") | str("u") | str("do") | str("pri") | str("t")).as(:token) >> (whitespace >> ((fragment >> whitespace) | fragment).repeat(1)).maybe).as(:command) }
+	rule(:command) { ((str("merge") | str("set") | str("show") | str("clear") | str("ls") | str("add") | str("append") | str("app") | str("rm") | str("u") | str("do") | str("pri") | str("t")).as(:token) >> (whitespace >> ((fragment >> whitespace) | fragment).repeat(1)).maybe).as(:command) }
+
+	rule(:commands) { command >> (whitespace.maybe >> str('|') >> whitespace.maybe >> command).repeat }
 
 	root(:commands)
 end
@@ -68,6 +70,9 @@ def parse(data)
 	parser = CommandParser.new
 	tree = parser.parse(data)
 	transformer = CommandTransformation.new
-	return transformer.apply(tree)
+	transformed_tree = transformer.apply(tree)
+	transformed_tree = [transformed_tree] if !transformed_tree.is_a?(Array)
+
+	return transformed_tree
 end
 
