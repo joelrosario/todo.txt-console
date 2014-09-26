@@ -1,6 +1,7 @@
 class ListCommand
 	def initialize(arguments)
-		@arguments = VARS['filter'].split(' ') if VARS['filter']
+		@arguments = (VARS['filter'].split(' ') if VARS['filter']) || []
+
 		arguments = arguments.collect {|arg| arg.to_s }
 
 		if arguments.find {|arg| arg.length == 1 }

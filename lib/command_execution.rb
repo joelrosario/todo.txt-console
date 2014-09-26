@@ -7,7 +7,7 @@ def execute_command(line)
 			result = command.execute(result[:data])
 		}
 
-		puts result[:display].to_s if result[:display] if result.is_a?(Hash) && result[:display]
+		puts result[:display].to_s if result && result.is_a?(Hash) && result[:display]
 	rescue CommandError => ce
 		puts "Command error: #{ce.message}"
 	rescue Parslet::ParseFailed => pe

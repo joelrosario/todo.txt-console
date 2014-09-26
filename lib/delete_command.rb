@@ -6,7 +6,7 @@ class DeleteCommand
 	end
 
 	def perform_modification
-		for_each_index {|index| puts index.inspect; @todos.delete(index) }
+		for_each_index {|index| @todos.delete(index) }
 	end
 end
 

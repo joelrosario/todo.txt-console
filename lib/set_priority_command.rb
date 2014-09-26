@@ -2,8 +2,12 @@ class SetPriorityCommand
 	include ModificationCommand
 
 	def initialize(arguments)
-		@index = to_index(arguments[0])
-		@priority = arguments[1].to_s.upcase
+		if arguments.length == 2
+			@index = to_index(arguments[0])
+			@priority = arguments[1].to_s.upcase
+		else
+			@priority = arguments[0].to_s.upcase
+		end
 	end
 
 	def perform_modification
