@@ -55,7 +55,6 @@ class Todo
 			thu: 4, thur: 4, thursday: 4,
 			fri: 5, friday: 5,
 			sat: 6, saturday: 6,
-			sun: 7, sunday: 7
 		}
 
 		one_day = 86400
@@ -65,8 +64,14 @@ class Todo
 		elsif date == 'tomorrow'
 			@threshold_date = Time.new(time.year, time.month, time.day) + one_day
 		elsif days_of_the_week.include?(date.to_sym)
-			difference = (time.wday - days_of_the_week[date.to_sym]).abs
-			difference += 7 if difference == 0
+			threshold_dow = days_of_the_week[date.to_sym]
+
+			if threshold_dow > time.wday
+				difference = threshold_dow - time.wday
+			else
+				difference = (6 - time.wday) + threshold_dow
+			end
+
 			@threshold_date = time + (one_day* difference)
 		else	
 			date_tokens = date.split('-').collect {|token| token.to_i }
